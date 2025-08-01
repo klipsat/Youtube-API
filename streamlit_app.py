@@ -10,7 +10,7 @@ SCOPES = [
 ]
 
 
-def get_flow():
+def get_flow() -> Flow:
     return Flow.from_client_config(
         {
             "web": {
@@ -57,6 +57,11 @@ st.set_page_config(page_title="YouTube Insights Tool")
 
 st.title("YouTube Insights Tool")
 
+# Ensure OAuth credentials are available
+if "google" not in st.secrets:
+    st.error("Google OAuth credentials missing in `secrets.toml`.")
+    st.stop()
+
 # Process OAuth2 redirect
 query_params = st.experimental_get_query_params()
 if "code" in query_params and "state" in query_params:
@@ -96,3 +101,4 @@ else:
         )
         st.session_state["state"] = state
         st.markdown(f"[Continue here]({auth_url})")
+        st.stop()

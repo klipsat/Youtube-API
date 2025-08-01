@@ -22,6 +22,9 @@ client_secret = "YOUR_CLIENT_SECRET"
 redirect_uri = "https://your-app-name.streamlit.app"
 ```
 
+5. Install dependencies locally with `pip install -r requirements.txt` if you
+   run the app outside Streamlit Cloud.
+
 ## Notes
 
 - The OAuth client ID and secret are kept private in `.streamlit/secrets.toml`.
