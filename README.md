@@ -1,6 +1,6 @@
 # YT Insights App
 
-This Streamlit app allows users to analyse YouTube videos using YouTube Data and Analytics APIs.
+This Streamlit app allows users to analyze YouTube videos using YouTube Data and Analytics APIs.
 
 ## Features
 
@@ -26,3 +26,4 @@ redirect_uri = "https://your-app-name.streamlit.app"
 
 - The OAuth client ID and secret are kept private in `.streamlit/secrets.toml`.
 - Users authenticate with their own Google accounts during runtime.
+- Login credentials are stored in `st.session_state` and can be cleared with the **Logout** button.

@@ -2,6 +2,7 @@ import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -35,44 +36,63 @@ def creds_to_dict(creds: Credentials):
     }
 
 
+def get_credentials() -> Credentials | None:
+    if "credentials" not in st.session_state:
+        return None
+    creds = Credentials(**st.session_state.credentials)
+    if not creds.valid and creds.refresh_token:
+        creds.refresh(Request())
+        st.session_state.credentials = creds_to_dict(creds)
+    return creds
+
+
+def get_youtube_service():
+    creds = get_credentials()
+    if not creds:
+        return None
+    return build("youtube", "v3", credentials=creds)
+
+
 st.set_page_config(page_title="YouTube Insights Tool")
 
 st.title("YouTube Insights Tool")
 
-# Handle OAuth2 redirect
+# Process OAuth2 redirect
 query_params = st.experimental_get_query_params()
+if "code" in query_params and "state" in query_params:
+    if (
+        "state" in st.session_state
+        and st.session_state["state"] == query_params["state"][0]
+    ):
+        flow = get_flow()
+        flow.fetch_token(code=query_params["code"][0])
+        st.session_state.credentials = creds_to_dict(flow.credentials)
+        st.experimental_set_query_params()
+        st.experimental_rerun()
 
-if "credentials" not in st.session_state:
-    if "code" in query_params and "state" in query_params:
-        if (
-            "state" in st.session_state
-            and st.session_state["state"] == query_params["state"][0]
-        ):
-            flow = get_flow()
-            flow.fetch_token(code=query_params["code"][0])
-            st.session_state.credentials = creds_to_dict(flow.credentials)
-            st.experimental_set_query_params()  # clear params
-            st.success("Successfully authenticated!")
-            st.experimental_rerun()
-    else:
-        if st.button("Login with Google"):
-            flow = get_flow()
-            auth_url, state = flow.authorization_url(
-                access_type="offline",
-                include_granted_scopes="true",
-                prompt="consent",
-            )
-            st.session_state["state"] = state
-            st.write("Please continue the login in a new tab:")
-            st.markdown(f"[Authorize]({auth_url})")
+creds = get_credentials()
+
+if creds:
+    st.success("Authenticated with Google")
+    if st.button("Logout"):
+        del st.session_state.credentials
+        st.experimental_rerun()
+    youtube = get_youtube_service()
+    if youtube:
+        # Example request listing user's channels
+        channels = (
+            youtube.channels()
+            .list(part="snippet,statistics", mine=True)
+            .execute()
+        )
+        st.json(channels)
 else:
-    creds = Credentials(**st.session_state.credentials)
-    youtube = build("youtube", "v3", credentials=creds)
-    st.write("Authenticated! You can now access the API.")
-    # Example: list the user's channels
-    channels = (
-        youtube.channels()
-        .list(part="snippet,statistics", mine=True)
-        .execute()
-    )
-    st.json(channels)
+    if st.button("Login with Google"):
+        flow = get_flow()
+        auth_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+        )
+        st.session_state["state"] = state
+        st.markdown(f"[Continue here]({auth_url})")
