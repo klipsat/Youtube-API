@@ -13,6 +13,12 @@ SCOPES = [
 
 
 def get_flow() -> Flow:
+    redirect_uri = st.secrets["google"]["redirect_uri"]
+    
+    # Ensure redirect URI ends with trailing slash for Streamlit Cloud
+    if "streamlit.app" in redirect_uri and not redirect_uri.endswith('/'):
+        redirect_uri += '/'
+        
     return Flow.from_client_config(
         {
             "web": {
@@ -23,7 +29,7 @@ def get_flow() -> Flow:
             }
         },
         scopes=SCOPES,
-        redirect_uri=st.secrets["google"]["redirect_uri"],
+        redirect_uri=redirect_uri,
     )
 
 
@@ -60,48 +66,33 @@ st.set_page_config(page_title="YouTube Insights Tool")
 st.title("YouTube Insights Tool")
 
 # Ensure OAuth credentials are available
-if "google" not in st.secrets:
-    st.error("Google OAuth credentials missing in `secrets.toml`.")
+try:
+    if "google" not in st.secrets:
+        st.error("Google API credentials not found. Please configure secrets.")
+        st.stop()
+except Exception as e:
+    st.error("Failed to load secrets. Please ensure secrets are configured.")
     st.stop()
 
 # Process OAuth2 redirect using query_params
 query_params = st.query_params
 
-# Debug information (remove this after fixing)
-if query_params:
-    st.write("Query params received:", dict(query_params))
-    if "state" in st.session_state:
-        st.write("Session state:", st.session_state["state"])
-
 if "code" in query_params and "state" in query_params:
-    # More flexible state comparison
-    received_state = query_params["state"]
-    stored_state = st.session_state.get("state", None)
-    
-    if stored_state and received_state == stored_state:
+    if query_params["state"] == st.session_state.get("state"):
         try:
             flow = get_flow()
             flow.fetch_token(code=query_params["code"])
             st.session_state.credentials = creds_to_dict(flow.credentials)
-            # Clear query params and state
             st.query_params.clear()
             if "state" in st.session_state:
                 del st.session_state["state"]
-            st.success("Authentication successful! Redirecting...")
             st.rerun()
         except Exception as e:
             st.error(f"Authentication failed: {str(e)}")
             st.query_params.clear()
-            if "state" in st.session_state:
-                del st.session_state["state"]
     else:
-        # Clear everything and start fresh
-        st.error("Invalid state parameter. Clearing session and trying again...")
+        st.error("Invalid state parameter")
         st.query_params.clear()
-        # Clear all session state to start fresh
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
 
 creds = get_credentials()
 
