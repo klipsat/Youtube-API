@@ -63,49 +63,74 @@ if "google" not in st.secrets:
     st.error("Google OAuth credentials missing in `secrets.toml`.")
     st.stop()
 
-# Process OAuth2 redirect - Fixed this part
-query_params = st.experimental_get_query_params()
+# Process OAuth2 redirect using query_params
+query_params = st.query_params
 
 if "code" in query_params and "state" in query_params:
     if (
         "state" in st.session_state
-        and st.session_state["state"] == query_params["state"][0]
+        and st.session_state["state"] == query_params["state"]
     ):
         try:
             flow = get_flow()
-            flow.fetch_token(code=query_params["code"][0])
+            flow.fetch_token(code=query_params["code"])
             st.session_state.credentials = creds_to_dict(flow.credentials)
-            st.experimental_set_query_params()  # Clear query params
-            st.experimental_rerun()
+            # Clear query params and rerun
+            st.query_params.clear()
+            st.rerun()
         except Exception as e:
             st.error(f"Authentication failed: {str(e)}")
-            st.experimental_set_query_params()  # Clear query params
+            st.query_params.clear()
+    else:
+        st.error("Invalid state parameter. Please try logging in again.")
+        st.query_params.clear()
 
 creds = get_credentials()
 
 if creds:
-    st.success("Authenticated with Google")
-    if st.button("Logout"):
-        if "credentials" in st.session_state:
-            del st.session_state.credentials
-        if "state" in st.session_state:
-            del st.session_state.state
-        st.experimental_rerun()
+    st.success("✅ Authenticated with Google")
+    
+    if st.button("🚪 Logout"):
+        # Clear all session state
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
     
     youtube = get_youtube_service()
     if youtube:
         try:
-            # Example request listing user's channels
+            # Get user's channels
             channels = (
                 youtube.channels()
                 .list(part="snippet,statistics", mine=True)
                 .execute()
             )
-            st.json(channels)
+            
+            if channels.get("items"):
+                channel = channels["items"][0]
+                st.subheader(f"📺 Channel: {channel['snippet']['title']}")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Subscribers", channel["statistics"]["subscriberCount"])
+                with col2:
+                    st.metric("Total Videos", channel["statistics"]["videoCount"])
+                with col3:
+                    st.metric("Total Views", channel["statistics"]["viewCount"])
+                
+                # Show raw data
+                with st.expander("📊 Raw Channel Data"):
+                    st.json(channels)
+            else:
+                st.warning("No channels found for this account.")
+                
         except Exception as e:
             st.error(f"Error fetching YouTube data: {str(e)}")
+            st.info("Make sure your Google account has a YouTube channel.")
 else:
-    if st.button("Login with Google"):
+    st.info("👋 Please authenticate with Google to access your YouTube data.")
+    
+    if st.button("🔐 Login with Google", type="primary"):
         flow = get_flow()
         auth_url, state = flow.authorization_url(
             access_type="offline",
@@ -113,4 +138,5 @@ else:
             prompt="consent",
         )
         st.session_state["state"] = state
-        st.markdown(f"[Continue here]({auth_url})")
+        st.markdown(f"**[🔗 Click here to authenticate with Google]({auth_url})**")
+        st.info("👆 Click the link above to sign in with your Google account")
