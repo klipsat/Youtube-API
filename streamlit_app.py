@@ -4,6 +4,7 @@ from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 import os
+import uuid
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -66,24 +67,41 @@ if "google" not in st.secrets:
 # Process OAuth2 redirect using query_params
 query_params = st.query_params
 
+# Debug information (remove this after fixing)
+if query_params:
+    st.write("Query params received:", dict(query_params))
+    if "state" in st.session_state:
+        st.write("Session state:", st.session_state["state"])
+
 if "code" in query_params and "state" in query_params:
-    if (
-        "state" in st.session_state
-        and st.session_state["state"] == query_params["state"]
-    ):
+    # More flexible state comparison
+    received_state = query_params["state"]
+    stored_state = st.session_state.get("state", None)
+    
+    if stored_state and received_state == stored_state:
         try:
             flow = get_flow()
             flow.fetch_token(code=query_params["code"])
             st.session_state.credentials = creds_to_dict(flow.credentials)
-            # Clear query params and rerun
+            # Clear query params and state
             st.query_params.clear()
+            if "state" in st.session_state:
+                del st.session_state["state"]
+            st.success("Authentication successful! Redirecting...")
             st.rerun()
         except Exception as e:
             st.error(f"Authentication failed: {str(e)}")
             st.query_params.clear()
+            if "state" in st.session_state:
+                del st.session_state["state"]
     else:
-        st.error("Invalid state parameter. Please try logging in again.")
+        # Clear everything and start fresh
+        st.error("Invalid state parameter. Clearing session and trying again...")
         st.query_params.clear()
+        # Clear all session state to start fresh
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
 
 creds = get_credentials()
 
@@ -131,12 +149,17 @@ else:
     st.info("👋 Please authenticate with Google to access your YouTube data.")
     
     if st.button("🔐 Login with Google", type="primary"):
+        # Generate a new unique state
+        state = str(uuid.uuid4())
+        st.session_state["state"] = state
+        
         flow = get_flow()
-        auth_url, state = flow.authorization_url(
+        auth_url, flow_state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",
+            state=state  # Use our custom state
         )
-        st.session_state["state"] = state
+        
         st.markdown(f"**[🔗 Click here to authenticate with Google]({auth_url})**")
         st.info("👆 Click the link above to sign in with your Google account")
