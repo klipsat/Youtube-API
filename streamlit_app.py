@@ -3,6 +3,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+import os
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -62,34 +63,47 @@ if "google" not in st.secrets:
     st.error("Google OAuth credentials missing in `secrets.toml`.")
     st.stop()
 
-# Process OAuth2 redirect
-query_params = st.query_params
+# Process OAuth2 redirect - Fixed this part
+query_params = st.experimental_get_query_params()
+
 if "code" in query_params and "state" in query_params:
     if (
         "state" in st.session_state
         and st.session_state["state"] == query_params["state"][0]
     ):
-        flow = get_flow()
-        flow.fetch_token(code=query_params["code"][0])
-        st.session_state.credentials = creds_to_dict(flow.credentials)
-        st.experimental_rerun()
+        try:
+            flow = get_flow()
+            flow.fetch_token(code=query_params["code"][0])
+            st.session_state.credentials = creds_to_dict(flow.credentials)
+            st.experimental_set_query_params()  # Clear query params
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Authentication failed: {str(e)}")
+            st.experimental_set_query_params()  # Clear query params
 
 creds = get_credentials()
 
 if creds:
     st.success("Authenticated with Google")
     if st.button("Logout"):
-        del st.session_state.credentials
+        if "credentials" in st.session_state:
+            del st.session_state.credentials
+        if "state" in st.session_state:
+            del st.session_state.state
         st.experimental_rerun()
+    
     youtube = get_youtube_service()
     if youtube:
-        # Example request listing user's channels
-        channels = (
-            youtube.channels()
-            .list(part="snippet,statistics", mine=True)
-            .execute()
-        )
-        st.json(channels)
+        try:
+            # Example request listing user's channels
+            channels = (
+                youtube.channels()
+                .list(part="snippet,statistics", mine=True)
+                .execute()
+            )
+            st.json(channels)
+        except Exception as e:
+            st.error(f"Error fetching YouTube data: {str(e)}")
 else:
     if st.button("Login with Google"):
         flow = get_flow()
@@ -100,4 +114,3 @@ else:
         )
         st.session_state["state"] = state
         st.markdown(f"[Continue here]({auth_url})")
-        st.stop()
